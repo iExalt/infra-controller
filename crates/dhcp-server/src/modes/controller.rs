@@ -62,7 +62,9 @@ impl DhcpMode for Controller {
             None => "",
         };
 
-        {
+        let use_cache = should_cache_response(vendor_class.as_ref());
+
+        if use_cache {
             let mut machine_cache = machine_cache.lock().await;
             if let Some(cache_entry) = cache::get(
                 &discovery_request.mac_address,
@@ -86,17 +88,51 @@ impl DhcpMode for Controller {
         }
 
         let record = discover_dhcp(discovery_request.clone(), config).await?;
-        let mut machine_cache = machine_cache.lock().await;
-        cache::put(
-            &discovery_request.mac_address,
-            link_address,
-            discovery_request.circuit_id,
-            discovery_request.remote_id,
-            vendor_id,
-            record.clone(),
-            &mut machine_cache,
-        );
+        if use_cache {
+            let mut machine_cache = machine_cache.lock().await;
+            cache::put(
+                &discovery_request.mac_address,
+                link_address,
+                discovery_request.circuit_id,
+                discovery_request.remote_id,
+                vendor_id,
+                record.clone(),
+                &mut machine_cache,
+            );
+        }
 
         Ok(record)
+    }
+}
+
+fn should_cache_response(vendor_class: Option<&VendorClass>) -> bool {
+    let Some(vendor_class) = vendor_class else {
+        return true;
+    };
+
+    // PXE/HTTP boot responses depend on current machine and instance state, so a cached
+    // discovery response can hide a newly allocated instance's first OS-imaging boot.
+    !matches!(vendor_class.id.as_str(), "PXEClient" | "HTTPClient")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn caches_regular_dhcp_responses() {
+        assert!(should_cache_response(None));
+
+        let vendor_class: VendorClass = "MSFT 5.0".parse().unwrap();
+        assert!(should_cache_response(Some(&vendor_class)));
+    }
+
+    #[test]
+    fn does_not_cache_firmware_boot_responses() {
+        let vendor_class: VendorClass = "PXEClient:Arch:00007:UNDI:003001".parse().unwrap();
+        assert!(!should_cache_response(Some(&vendor_class)));
+
+        let vendor_class: VendorClass = "HTTPClient:Arch:00016:UNDI:003001".parse().unwrap();
+        assert!(!should_cache_response(Some(&vendor_class)));
     }
 }
