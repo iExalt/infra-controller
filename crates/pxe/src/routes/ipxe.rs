@@ -34,6 +34,18 @@ pub enum PxeErrorCode {
     InstructionsEmpty = 107,
 }
 
+fn apply_url_overrides(
+    instructions: String,
+    api_url: &str,
+    pxe_url: &str,
+    static_pxe_url: &str,
+) -> String {
+    instructions
+        .replace("[api_url]", api_url)
+        .replace("[pxe_url]", pxe_url)
+        .replace("[static_pxe_url]", static_pxe_url)
+}
+
 fn generate_error_template<D1, D2>(error_str: D1, error_code: D2) -> HashMap<String, String>
 where
     D1: Display,
@@ -144,11 +156,11 @@ pub async fn boot(contents: MachineInterface, state: State<AppState>) -> impl In
                         r#"
 echo Failed to fetch custom_ipxe: {err} ||
 exit 101 ||
-"#
+                        "#
                     )
-                })
-                .replace("[api_url]", &api_url)
-                .replace("[pxe_url]", &pxe_url);
+                });
+            let instructions =
+                apply_url_overrides(instructions, &api_url, &pxe_url, &static_pxe_url);
 
             // Override template URLs for external clients.
             template_data.insert("pxe_url".to_string(), pxe_url);
@@ -176,4 +188,26 @@ pub fn get_router(path_prefix: &str) -> Router<AppState> {
             get(whoami),
         )
         .route(format!("{}/{}", path_prefix, "boot").as_str(), get(boot))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::apply_url_overrides;
+
+    #[test]
+    fn url_overrides_replace_static_pxe_placeholder() {
+        let instructions = "server_uri=[api_url] pxe_uri=[pxe_url] newrootfs=[static_pxe_url]/public/blobs/internal/x86_64/scout.squashfs".to_string();
+
+        let rendered = apply_url_overrides(
+            instructions,
+            "https://api.example",
+            "http://pxe.example:8080",
+            "http://static.example:8080",
+        );
+
+        assert_eq!(
+            rendered,
+            "server_uri=https://api.example pxe_uri=http://pxe.example:8080 newrootfs=http://static.example:8080/public/blobs/internal/x86_64/scout.squashfs"
+        );
+    }
 }

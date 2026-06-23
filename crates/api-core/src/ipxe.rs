@@ -192,6 +192,17 @@ boot ||
 }
 
 impl PxeInstructions {
+    fn get_scout_command_line(
+        arch: &str,
+        machine_interface_id: MachineInterfaceId,
+        mac_address: MacAddress,
+        console: &str,
+    ) -> String {
+        format!(
+            "mac={mac_address} console=tty0 console={console},115200 pci=realloc=off iommu=off cli_cmd=auto-detect machine_id={machine_interface_id} server_uri=[api_url] pxe_uri=[pxe_url] newrootfs=[static_pxe_url]/public/blobs/internal/{arch}/scout.squashfs"
+        )
+    }
+
     fn get_pxe_instruction_for_arch(
         arch: rpc::MachineArchitecture,
         machine_interface_id: MachineInterfaceId,
@@ -207,7 +218,12 @@ impl PxeInstructions {
                 if machine_type == MachineType::Host || machine_type == MachineType::PredictedHost {
                     InstructionGenerator {
                         kernel: "${base-url}/internal/aarch64/scout.efi".to_string(),
-                        command_line: format!("mac={mac_address} console=tty0 console={console},115200 pci=realloc=off iommu=off cli_cmd=auto-detect machine_id={machine_interface_id} server_uri=[api_url] pxe_uri=[pxe_url]"),
+                        command_line: Self::get_scout_command_line(
+                            "aarch64",
+                            machine_interface_id,
+                            mac_address,
+                            console,
+                        ),
                         initrd: None,
                     }
                 }
@@ -223,7 +239,12 @@ impl PxeInstructions {
             rpc::MachineArchitecture::X86 => {
                 InstructionGenerator {
                     kernel: "${base-url}/internal/x86_64/scout.efi".to_string(),
-                    command_line: format!("mac={mac_address} console=tty0 console={console},115200 pci=realloc=off iommu=off cli_cmd=auto-detect machine_id={machine_interface_id} server_uri=[api_url] pxe_uri=[pxe_url]"),
+                    command_line: Self::get_scout_command_line(
+                        "x86_64",
+                        machine_interface_id,
+                        mac_address,
+                        console,
+                    ),
                     initrd: None,
                 }
             }

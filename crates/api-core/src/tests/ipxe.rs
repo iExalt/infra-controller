@@ -319,6 +319,11 @@ async fn test_pxe_host(pool: sqlx::PgPool) {
     )
     .await;
     assert!(instructions.pxe_script.contains("x86_64/scout.efi"));
+    assert!(
+        instructions
+            .pxe_script
+            .contains("newrootfs=[static_pxe_url]/public/blobs/internal/x86_64/scout.squashfs")
+    );
 
     move_machine_to_needed_state(
         host_id,
